@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-opener";
 import type { PlayerStore, RepeatMode, Track } from "../types";
 
 // ─── Mock Data ─────────────────────────────────────────────────────
@@ -29,6 +30,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   visualizerEnabled: true,
   lyricsEnabled: false,
   mode: "spotify",
+  isAuthenticated: false,
 
   // ── Playback Actions ───────────────────────────────────────────
 
@@ -196,5 +198,52 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         // Suppress polling errors to avoid console spam when not connected
       }
     }, 1000);
+  },
+
+  // ── Spotify Auth ─────────────────────────────────────────────
+
+  checkSpotifyAuth: async () => {
+    try {
+      const isAuth: boolean = await invoke("spotify_is_authenticated");
+      set({ isAuthenticated: isAuth });
+      if (isAuth) {
+        get().startPolling();
+      }
+    } catch (e) {
+      console.error("Check auth error:", e);
+      set({ isAuthenticated: false });
+    }
+  },
+
+  loginSpotify: async () => {
+    try {
+      const url: string = await invoke("spotify_auth_url");
+      await open(url);
+    } catch (e) {
+      console.error("Login URL error:", e);
+    }
+  },
+
+  submitSpotifyCode: async (urlOrCode: string) => {
+    try {
+      let code = urlOrCode.trim();
+      if (code.includes("code=")) {
+        try {
+          const urlStr = code.startsWith("http") ? code : `http://localhost${code.startsWith("/") ? "" : "/"}${code}`;
+          const url = new URL(urlStr);
+          code = url.searchParams.get("code") || code;
+        } catch (err) {
+          // Fallback if URL parsing fails
+          const match = code.match(/code=([^&]+)/);
+          if (match) code = match[1];
+        }
+      }
+      await invoke("spotify_callback", { code });
+      set({ isAuthenticated: true });
+      get().startPolling();
+    } catch (e) {
+      console.error("Callback error:", e);
+      throw e;
+    }
   },
 }));

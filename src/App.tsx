@@ -8,16 +8,26 @@ import ProgressBar from "./components/ProgressBar";
 import Visualizer from "./components/Visualizer";
 import ModeToggle from "./components/ModeToggle";
 import LyricsOverlay from "./components/LyricsOverlay";
+import SpotifyLogin from "./components/SpotifyLogin";
 import { usePlayerStore } from "./stores/playerStore";
+import { Music } from "lucide-react";
 
 export default function App() {
   const visualizerEnabled = usePlayerStore((s) => s.visualizerEnabled);
   const lyricsEnabled = usePlayerStore((s) => s.lyricsEnabled);
   const startPolling = usePlayerStore((s) => s.startPolling);
+  const checkSpotifyAuth = usePlayerStore((s) => s.checkSpotifyAuth);
+  const mode = usePlayerStore((s) => s.mode);
+  const isAuthenticated = usePlayerStore((s) => s.isAuthenticated);
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
 
   useEffect(() => {
-    startPolling();
-  }, [startPolling]);
+    if (mode === "spotify") {
+      checkSpotifyAuth();
+    } else {
+      startPolling();
+    }
+  }, [mode, checkSpotifyAuth, startPolling]);
 
   return (
     <div className="w-full h-full bg-neonwave-radial text-text-primary font-sans relative overflow-hidden">
@@ -40,7 +50,17 @@ export default function App() {
       >
         {/* ─── Top: Album Art + Track Info ─────────────────────── */}
         <div className="flex-1 flex flex-col items-center justify-center px-8 gap-6 min-h-0 relative">
-          <AlbumArt />
+          <div className="relative">
+            {mode === "local" && currentTrack?.id === "1" ? (
+              // Mock track in local mode means no track loaded
+              <div className="w-72 h-72 rounded-[28px] bg-white/5 border border-white/10 flex flex-col items-center justify-center text-text-secondary gap-4 shadow-lg backdrop-blur-sm">
+                <Music size={48} className="opacity-50" />
+                <p className="text-sm font-medium tracking-wide">No track loaded</p>
+              </div>
+            ) : (
+              <AlbumArt />
+            )}
+          </div>
 
           <div className="flex items-center gap-2 w-full max-w-sm justify-center">
             <TrackInfo />
@@ -48,6 +68,10 @@ export default function App() {
 
           <AnimatePresence>
             {lyricsEnabled && <LyricsOverlay />}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {mode === "spotify" && !isAuthenticated && <SpotifyLogin />}
           </AnimatePresence>
         </div>
 

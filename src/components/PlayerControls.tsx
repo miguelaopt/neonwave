@@ -10,7 +10,10 @@ import {
   Volume2,
   VolumeX,
   Volume1,
+  FolderOpen,
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import { usePlayerStore } from "../stores/playerStore";
 
 export default function PlayerControls() {
@@ -24,14 +27,40 @@ export default function PlayerControls() {
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
   const cycleRepeat = usePlayerStore((s) => s.cycleRepeat);
   const setVolume = usePlayerStore((s) => s.setVolume);
+  const mode = usePlayerStore((s) => s.mode);
+
+  const handleOpenFile = async () => {
+    try {
+      const selectedPath = await open({
+        multiple: false,
+        directory: false,
+        filters: [
+          { name: "Audio", extensions: ["mp3", "wav", "flac", "ogg", "m4a"] },
+        ],
+      });
+      
+      if (selectedPath && typeof selectedPath === "string") {
+        await invoke("local_open_file", { path: selectedPath });
+        await invoke("local_play");
+        usePlayerStore.setState({ isPlaying: true, progressMs: 0 });
+      }
+    } catch (e) {
+      console.error("Open file error:", e);
+    }
+  };
 
   const RepeatIcon = repeat === "one" ? Repeat1 : Repeat;
   const VolumeIcon = volume === 0 ? VolumeX : volume < 50 ? Volume1 : Volume2;
 
   return (
     <div className="flex items-center justify-between w-full gap-3">
-      {/* Left: Shuffle */}
+      {/* Left: Open File + Shuffle */}
       <div className="flex items-center gap-1 flex-1 justify-start">
+        {mode === "local" && (
+          <ControlButton onClick={handleOpenFile} label="Open File">
+            <FolderOpen size={16} strokeWidth={2} />
+          </ControlButton>
+        )}
         <ControlButton
           onClick={toggleShuffle}
           active={shuffle}
