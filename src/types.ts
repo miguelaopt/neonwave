@@ -27,6 +27,8 @@ export interface PlayerState {
   // UI
   isLiked: boolean;
   visualizerEnabled: boolean;
+  lyricsEnabled: boolean;
+  mode: "spotify" | "local";
 }
 
 export interface PlayerActions {
@@ -46,10 +48,13 @@ export interface PlayerActions {
   cycleRepeat: () => void;
   toggleLike: () => void;
   toggleVisualizer: () => void;
+  toggleLyrics: () => void;
+  setMode: (mode: "spotify" | "local") => void;
 
   // Internal
   setProgress: (ms: number) => void;
   setTrack: (track: Track) => void;
+  startPolling: () => void;
 }
 
 export type PlayerStore = PlayerState & PlayerActions;

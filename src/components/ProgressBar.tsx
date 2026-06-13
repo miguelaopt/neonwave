@@ -24,22 +24,11 @@ export default function ProgressBar() {
   const displayProgress = isDragging ? dragProgress : progressMs;
   const progressPercent = Math.min(100, (displayProgress / durationMs) * 100);
 
-  // Simulate progress ticking when playing
+  // Removed simulated ticking because we now poll the backend state
   useEffect(() => {
-    if (!isPlaying || isDragging) return;
-
-    const interval = setInterval(() => {
-      const current = usePlayerStore.getState().progressMs;
-      const duration = usePlayerStore.getState().currentTrack?.durationMs ?? 0;
-      if (current >= duration) {
-        usePlayerStore.getState().pause();
-        return;
-      }
-      setProgress(current + 200);
-    }, 200);
-
-    return () => clearInterval(interval);
-  }, [isPlaying, isDragging, setProgress]);
+    // If we wanted smooth interpolation we could do it here based on the last polled value,
+    // but for now relying on the polling is safer and prevents jumping.
+  }, []);
 
   const getProgressFromEvent = useCallback(
     (clientX: number): number => {

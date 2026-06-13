@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import TitleBar from "./components/TitleBar";
 import AlbumArt from "./components/AlbumArt";
@@ -6,10 +7,17 @@ import PlayerControls from "./components/PlayerControls";
 import ProgressBar from "./components/ProgressBar";
 import Visualizer from "./components/Visualizer";
 import ModeToggle from "./components/ModeToggle";
+import LyricsOverlay from "./components/LyricsOverlay";
 import { usePlayerStore } from "./stores/playerStore";
 
 export default function App() {
   const visualizerEnabled = usePlayerStore((s) => s.visualizerEnabled);
+  const lyricsEnabled = usePlayerStore((s) => s.lyricsEnabled);
+  const startPolling = usePlayerStore((s) => s.startPolling);
+
+  useEffect(() => {
+    startPolling();
+  }, [startPolling]);
 
   return (
     <div className="w-full h-full bg-neonwave-radial text-text-primary font-sans relative overflow-hidden">
@@ -31,17 +39,21 @@ export default function App() {
         className="relative z-10 flex flex-col h-full pt-11"
       >
         {/* ─── Top: Album Art + Track Info ─────────────────────── */}
-        <div className="flex-1 flex flex-col items-center justify-center px-8 gap-6 min-h-0">
+        <div className="flex-1 flex flex-col items-center justify-center px-8 gap-6 min-h-0 relative">
           <AlbumArt />
 
           <div className="flex items-center gap-2 w-full max-w-sm justify-center">
             <TrackInfo />
           </div>
+
+          <AnimatePresence>
+            {lyricsEnabled && <LyricsOverlay />}
+          </AnimatePresence>
         </div>
 
         {/* ─── Bottom: Controls Panel ─────────────────────────── */}
-        <div className="flex-shrink-0 px-6 pb-3">
-          <div className="glass-panel px-6 py-5 flex flex-col gap-4">
+        <div className="flex-shrink-0 px-6 pb-3 z-50 bg-background/50 backdrop-blur-md border-t border-white/5 relative">
+          <div className="glass-panel px-6 py-5 flex flex-col gap-4 mt-2">
             {/* Progress */}
             <ProgressBar />
 
@@ -65,7 +77,7 @@ export default function App() {
           </AnimatePresence>
 
           {/* Mode toggle row */}
-          <div className="flex justify-center mt-1 mb-1">
+          <div className="flex justify-center mt-2 mb-1">
             <ModeToggle />
           </div>
         </div>
