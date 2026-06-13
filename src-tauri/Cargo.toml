@@ -1,0 +1,56 @@
+[package]
+name = "tauri-app"
+version = "0.1.0"
+description = "NeonWave – a modern music player"
+authors = ["you"]
+edition = "2021"
+
+[lib]
+name = "tauri_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# ── Tauri core ───────────────────────────────────────────────────────────────
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+
+# ── Serialisation ────────────────────────────────────────────────────────────
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# ── Spotify ──────────────────────────────────────────────────────────────────
+rspotify = { version = "0.13", features = ["client-reqwest", "reqwest-rustls-tls"] }
+
+# ── Local audio playback ─────────────────────────────────────────────────────
+rodio = "0.20"
+
+# ── Audio metadata / tags ────────────────────────────────────────────────────
+lofty = "0.22"
+
+# ── Audio capture (WASAPI loopback on Windows) ───────────────────────────────
+cpal = "0.15"
+
+# ── Image processing (colour extraction) ─────────────────────────────────────
+image = "0.25"
+
+# ── HTTP client ──────────────────────────────────────────────────────────────
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+
+# ── Async runtime ────────────────────────────────────────────────────────────
+tokio = { version = "1", features = ["full"] }
+
+# ── FFT for audio analysis ───────────────────────────────────────────────────
+rustfft = "6.2"
+
+# ── Synchronisation ──────────────────────────────────────────────────────────
+parking_lot = "0.12"
+
+# ── User directories ─────────────────────────────────────────────────────────
+dirs = "6"
+
+# ── Environment files ────────────────────────────────────────────────────────
+dotenv = "0.15"
