@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-opener";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { PlayerStore, RepeatMode, Track } from "../types";
 
 // ─── Mock Data ─────────────────────────────────────────────────────
@@ -31,6 +31,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   lyricsEnabled: false,
   mode: "spotify",
   isAuthenticated: false,
+  searchResults: [],
 
   // ── Playback Actions ───────────────────────────────────────────
 
@@ -218,7 +219,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   loginSpotify: async () => {
     try {
       const url: string = await invoke("spotify_auth_url");
-      await open(url);
+      await openUrl(url);
     } catch (e) {
       console.error("Login URL error:", e);
     }
@@ -244,6 +245,33 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     } catch (e) {
       console.error("Callback error:", e);
       throw e;
+    }
+  },
+
+  search: async (query: string) => {
+    try {
+      const results: any[] = await invoke("spotify_search", { query });
+      set({
+        searchResults: results.map((r) => ({
+          id: r.id,
+          title: r.title,
+          artist: r.artist,
+          album: "", // Will be empty from backend currently
+          albumArtUrl: r.albumArtUrl || "",
+          durationMs: 0, // Ignored
+        })),
+      });
+    } catch (e) {
+      console.error("Search error:", e);
+    }
+  },
+
+  playTrack: async (uri: string) => {
+    try {
+      await invoke("spotify_play_track", { uri });
+      set({ isPlaying: true });
+    } catch (e) {
+      console.error("Play track error:", e);
     }
   },
 }));

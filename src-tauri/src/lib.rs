@@ -27,6 +27,8 @@ pub fn run() {
             spotify::spotify_next,
             spotify::spotify_previous,
             spotify::spotify_set_volume,
+            spotify::spotify_search,
+            spotify::spotify_play_track,
             // ── Local player ────────────────────────────────────────────
             local_player::local_open_file,
             local_player::local_play,

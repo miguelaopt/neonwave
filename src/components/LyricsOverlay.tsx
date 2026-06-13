@@ -99,12 +99,12 @@ export default function LyricsOverlay() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 20 }}
-      className="absolute inset-0 z-50 p-6 flex flex-col bg-black/60 backdrop-blur-xl"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="absolute inset-0 flex flex-col bg-black/40"
     >
-      <div className="flex-1 overflow-y-auto no-scrollbar scroll-smooth" ref={containerRef}>
+      <div className="flex-1 overflow-y-auto no-scrollbar scroll-smooth p-4" ref={containerRef}>
         <div className="py-[40vh] flex flex-col items-center gap-6 text-center">
           {loading && (
             <div className="text-neon-purple animate-pulse">Loading lyrics...</div>

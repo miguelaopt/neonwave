@@ -3,7 +3,7 @@
 //! All commands gracefully return errors when credentials are missing so the
 //! frontend can show an appropriate message instead of crashing.
 
-use crate::types::PlaybackState;
+use crate::types::{PlaybackState, Track};
 use parking_lot::Mutex;
 use rspotify::{
     model::{AdditionalType, Market},
@@ -190,4 +190,46 @@ pub async fn spotify_set_volume(volume: u8) -> Result<(), String> {
         .volume(volume, None)
         .await
         .map_err(|e| format!("Set volume failed: {e}"))
+}
+
+/// Search for a track.
+#[tauri::command]
+pub async fn spotify_search(query: String) -> Result<Vec<Track>, String> {
+    let spotify = require_authed_client()?;
+    let result = spotify
+        .search(&query, rspotify::model::SearchType::Track, None, None, Some(20), None)
+        .await
+        .map_err(|e| format!("Search failed: {e}"))?;
+
+    let tracks = if let rspotify::model::SearchResult::Tracks(page) = result {
+        page.items
+            .into_iter()
+            .map(|t| Track {
+                id: t.id.unwrap().to_string(),
+                title: t.name,
+                artist: t.artists.iter().map(|a| a.name.clone()).collect::<Vec<_>>().join(", "),
+                album_art_url: t.album.images.first().map(|i| i.url.clone()),
+            })
+            .collect()
+    } else {
+        vec![]
+    };
+
+    Ok(tracks)
+}
+
+/// Play a specific track via its URI.
+#[tauri::command]
+pub async fn spotify_play_track(uri: String) -> Result<(), String> {
+    let spotify = require_authed_client()?;
+    let playable_uri = rspotify::model::PlayableId::from_uri(&uri).map_err(|e| format!("Invalid URI: {e}"))?;
+    spotify
+        .start_uris_playback(
+            [playable_uri],
+            None,
+            None,
+            None,
+        )
+        .await
+        .map_err(|e| format!("Play track failed: {e}"))
 }

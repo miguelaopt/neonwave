@@ -31,3 +31,13 @@ pub struct AudioData {
     pub peak: f32,
     pub rms: f32,
 }
+
+/// A track returned from a Spotify search.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Track {
+    pub id: String,
+    pub title: String,
+    pub artist: String,
+    pub album_art_url: Option<String>,
+}

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import TitleBar from "./components/TitleBar";
-import AlbumArt from "./components/AlbumArt";
+import AuraDisc from "./components/AuraDisc";
 import TrackInfo from "./components/TrackInfo";
 import PlayerControls from "./components/PlayerControls";
 import ProgressBar from "./components/ProgressBar";
@@ -9,6 +9,7 @@ import Visualizer from "./components/Visualizer";
 import ModeToggle from "./components/ModeToggle";
 import LyricsOverlay from "./components/LyricsOverlay";
 import SpotifyLogin from "./components/SpotifyLogin";
+import LeftSidebar from "./components/LeftSidebar";
 import { usePlayerStore } from "./stores/playerStore";
 import { Music } from "lucide-react";
 
@@ -48,30 +49,47 @@ export default function App() {
         transition={{ duration: 0.6, ease: "easeOut" }}
         className="relative z-10 flex flex-col h-full pt-11"
       >
-        {/* ─── Top: Album Art + Track Info ─────────────────────── */}
-        <div className="flex-1 flex flex-col items-center justify-center px-8 gap-6 min-h-0 relative">
-          <div className="relative">
-            {mode === "local" && currentTrack?.id === "1" ? (
-              // Mock track in local mode means no track loaded
-              <div className="w-72 h-72 rounded-[28px] bg-white/5 border border-white/10 flex flex-col items-center justify-center text-text-secondary gap-4 shadow-lg backdrop-blur-sm">
-                <Music size={48} className="opacity-50" />
-                <p className="text-sm font-medium tracking-wide">No track loaded</p>
-              </div>
-            ) : (
-              <AlbumArt />
+        <LeftSidebar />
+
+        {/* ─── Top: Modular Layout (Center Disc, Right Lyrics) ─────────────────────── */}
+        <div className="flex-1 flex flex-row items-center justify-center px-8 gap-6 min-h-0 relative">
+          
+          {/* Center Column: AuraDisc & TrackInfo */}
+          <div className="flex-1 flex flex-col items-center justify-center gap-8 z-10 relative">
+            <div className="relative">
+              {mode === "local" && currentTrack?.id === "1" ? (
+                <div className="w-80 h-80 rounded-full bg-white/5 border border-white/10 flex flex-col items-center justify-center text-text-secondary gap-4 shadow-lg backdrop-blur-sm">
+                  <Music size={48} className="opacity-50" />
+                  <p className="text-sm font-medium tracking-wide">No track loaded</p>
+                </div>
+              ) : (
+                <AuraDisc />
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 w-full max-w-sm justify-center">
+              <TrackInfo />
+            </div>
+
+            <AnimatePresence>
+              {mode === "spotify" && !isAuthenticated && <SpotifyLogin />}
+            </AnimatePresence>
+          </div>
+
+          {/* Right Column: Lyrics (If enabled) */}
+          <AnimatePresence>
+            {lyricsEnabled && (
+              <motion.div
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 50 }}
+                className="w-80 h-full py-6 pr-4 relative z-10"
+              >
+                <div className="w-full h-full glass-panel overflow-hidden border border-white/10 rounded-2xl relative">
+                  <LyricsOverlay />
+                </div>
+              </motion.div>
             )}
-          </div>
-
-          <div className="flex items-center gap-2 w-full max-w-sm justify-center">
-            <TrackInfo />
-          </div>
-
-          <AnimatePresence>
-            {lyricsEnabled && <LyricsOverlay />}
-          </AnimatePresence>
-
-          <AnimatePresence>
-            {mode === "spotify" && !isAuthenticated && <SpotifyLogin />}
           </AnimatePresence>
         </div>
 

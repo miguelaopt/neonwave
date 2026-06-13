@@ -30,6 +30,7 @@ export interface PlayerState {
   lyricsEnabled: boolean;
   mode: "spotify" | "local";
   isAuthenticated: boolean;
+  searchResults: Track[];
 }
 
 export interface PlayerActions {
@@ -61,6 +62,10 @@ export interface PlayerActions {
   checkSpotifyAuth: () => Promise<void>;
   loginSpotify: () => Promise<void>;
   submitSpotifyCode: (code: string) => Promise<void>;
+
+  // Search
+  search: (query: string) => Promise<void>;
+  playTrack: (uri: string) => Promise<void>;
 }
 
 export type PlayerStore = PlayerState & PlayerActions;
