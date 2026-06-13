@@ -1,6 +1,4 @@
-//! Local audio player powered by rodio, with metadata reading via lofty.
-
-use crate::types::TrackMetadata;
+﻿use crate::types::TrackMetadata;
 use lofty::prelude::*;
 use parking_lot::Mutex;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink};
@@ -9,31 +7,18 @@ use std::io::BufReader;
 use std::path::Path;
 use std::sync::LazyLock;
 use std::time::Instant;
-
-// ── Send/Sync wrapper ───────────────────────────────────────────────────────
-//
-// `OutputStream` (and its inner `cpal::Stream`) are `!Send` because cpal uses
-// a platform marker.  We need them in a static `Mutex`.  This is safe because
-// we never move them across threads without holding the lock.
+use base64::prelude::*;
 
 struct PlayerInner {
-    /// rodio `Sink` that drives playback.
     sink: Option<Sink>,
-    /// Keep the stream alive for the lifetime of the player.
     _stream: Option<OutputStream>,
     _stream_handle: Option<OutputStreamHandle>,
-    /// Path of the currently-loaded file.
     current_file: Option<String>,
-    /// Instant when playback last (re)started – used for position tracking.
     play_start: Option<Instant>,
-    /// Accumulated position (ms) before the last resume.
     accumulated_ms: u64,
-    /// Whether the sink is paused.
     paused: bool,
 }
 
-// SAFETY: We only access `PlayerInner` behind a `Mutex` and never move it
-// across threads outside the lock.
 unsafe impl Send for PlayerInner {}
 unsafe impl Sync for PlayerInner {}
 
@@ -49,9 +34,14 @@ static PLAYER: LazyLock<Mutex<PlayerInner>> = LazyLock::new(|| {
     })
 });
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+static LOCAL_PLAYLIST: LazyLock<Mutex<Vec<TrackMetadata>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+static CURRENT_INDEX: LazyLock<Mutex<Option<usize>>> = LazyLock::new(|| Mutex::new(None));
 
-fn read_metadata(path: &str) -> Result<TrackMetadata, String> {
+fn ensure_output() -> Result<(OutputStream, OutputStreamHandle), String> {
+    OutputStream::try_default().map_err(|e| format!("Audio output error: {e}"))
+}
+
+fn read_metadata(path: &str, id: &str) -> Result<TrackMetadata, String> {
     let tagged_file = lofty::read_from_path(path)
         .map_err(|e| format!("Failed to read tags from {path}: {e}"))?;
 
@@ -79,67 +69,106 @@ fn read_metadata(path: &str) -> Result<TrackMetadata, String> {
         title
     };
 
-    let has_cover = tag
-        .map(|t| !t.pictures().is_empty())
-        .unwrap_or(false);
+    let mut album_art_url = String::new();
+    if let Some(tag) = tag {
+        if let Some(pic) = tag.pictures().first() {
+            let b64 = BASE64_STANDARD.encode(pic.data());
+            let mime_type = pic.mime_type().map(|m| m.as_str()).unwrap_or("image/jpeg");
+            album_art_url = format!("data:{};base64,{}", mime_type, b64);
+        }
+    }
 
     Ok(TrackMetadata {
+        id: id.to_string(),
         title,
-        artist: if artist.is_empty() {
-            "Unknown Artist".into()
-        } else {
-            artist
-        },
-        album: if album.is_empty() {
-            "Unknown Album".into()
-        } else {
-            album
-        },
+        artist: if artist.is_empty() { "Unknown Artist".into() } else { artist },
+        album: if album.is_empty() { "Unknown Album".into() } else { album },
         duration_ms,
-        file_path: path.to_string(),
-        has_cover,
+        album_art_url,
     })
 }
 
-fn ensure_output() -> Result<(OutputStream, OutputStreamHandle), String> {
-    OutputStream::try_default().map_err(|e| format!("Audio output error: {e}"))
-}
-
-// ── Tauri commands ──────────────────────────────────────────────────────────
-
-/// Open a local audio file, read its metadata, and load it into the player.
-/// Playback starts immediately.
-#[tauri::command]
-pub fn local_open_file(path: String) -> Result<TrackMetadata, String> {
-    let meta = read_metadata(&path)?;
-
+fn internal_play_file(path: &str) -> Result<(), String> {
     let (stream, stream_handle) = ensure_output()?;
     let sink = Sink::try_new(&stream_handle).map_err(|e| format!("Sink error: {e}"))?;
 
-    let file =
-        File::open(&path).map_err(|e| format!("Cannot open file \"{path}\": {e}"))?;
+    let file = File::open(path).map_err(|e| format!("Cannot open file \"{path}\": {e}"))?;
     let reader = BufReader::new(file);
-    let source =
-        Decoder::new(reader).map_err(|e| format!("Decode error for \"{path}\": {e}"))?;
+    let source = Decoder::new(reader).map_err(|e| format!("Decode error for \"{path}\": {e}"))?;
 
     sink.append(source);
+    sink.play();
 
     let mut player = PLAYER.lock();
-    // Drop old sink / stream.
     player.sink = Some(sink);
     player._stream = Some(stream);
     player._stream_handle = Some(stream_handle);
-    player.current_file = Some(path);
+    player.current_file = Some(path.to_string());
     player.play_start = Some(Instant::now());
     player.accumulated_ms = 0;
     player.paused = false;
 
+    Ok(())
+}
+
+#[tauri::command]
+pub fn scan_directory(path: String) -> Result<Vec<TrackMetadata>, String> {
+    let dir = Path::new(&path);
+    if !dir.is_dir() {
+        return Err(format!("{path} is not a directory"));
+    }
+
+    let exts = ["mp3", "flac", "ogg", "wav", "m4a"];
+    let mut tracks = Vec::new();
+
+    let entries = std::fs::read_dir(dir).map_err(|e| format!("Cannot read directory: {e}"))?;
+    for (i, entry) in entries.flatten().enumerate() {
+        let p = entry.path();
+        if p.is_file() {
+            if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+                if exts.contains(&ext.to_lowercase().as_str()) {
+                    let id = format!("{}", i);
+                    if let Ok(meta) = read_metadata(&p.to_string_lossy(), &id) {
+                        tracks.push((p.to_string_lossy().to_string(), meta));
+                    }
+                }
+            }
+        }
+    }
+
+    let mut list = Vec::new();
+    // Sort by title
+    tracks.sort_by(|a, b| a.1.title.to_lowercase().cmp(&b.1.title.to_lowercase()));
+    
+    // Assign sorted index as ID
+    for (i, mut track) in tracks.into_iter().enumerate() {
+        track.1.id = track.0.clone(); // use path as ID internally so we can play it
+        list.push(track.1);
+    }
+
+    *LOCAL_PLAYLIST.lock() = list.clone();
+    Ok(list)
+}
+
+#[tauri::command]
+pub fn local_open_file(path: String) -> Result<TrackMetadata, String> {
+    let meta = read_metadata(&path, &path)?;
+    internal_play_file(&path)?;
     Ok(meta)
 }
 
-/// Resume (unpause) playback.
 #[tauri::command]
-pub fn local_play() -> Result<(), String> {
+pub fn local_play(index: Option<usize>) -> Result<(), String> {
+    if let Some(idx) = index {
+        let playlist = LOCAL_PLAYLIST.lock();
+        if let Some(track) = playlist.get(idx) {
+            *CURRENT_INDEX.lock() = Some(idx);
+            return internal_play_file(&track.id);
+        } else {
+            return Err("Invalid index".into());
+        }
+    }
+
     let mut player = PLAYER.lock();
     if let Some(ref sink) = player.sink {
         sink.play();
@@ -151,13 +180,11 @@ pub fn local_play() -> Result<(), String> {
     }
 }
 
-/// Pause playback.
 #[tauri::command]
 pub fn local_pause() -> Result<(), String> {
     let mut player = PLAYER.lock();
     if let Some(ref sink) = player.sink {
         sink.pause();
-        // Accumulate elapsed time.
         if let Some(start) = player.play_start.take() {
             player.accumulated_ms += start.elapsed().as_millis() as u64;
         }
@@ -168,7 +195,6 @@ pub fn local_pause() -> Result<(), String> {
     }
 }
 
-/// Stop playback and release the audio resources.
 #[tauri::command]
 pub fn local_stop() -> Result<(), String> {
     let mut player = PLAYER.lock();
@@ -184,51 +210,38 @@ pub fn local_stop() -> Result<(), String> {
     Ok(())
 }
 
-/// Seek to `position_ms` in the current track.
-/// rodio does not support native seeking on all decoders, so we reload and
-/// skip forward – acceptable for an MVP.
 #[tauri::command]
 pub fn local_seek(position_ms: u64) -> Result<(), String> {
     let mut player = PLAYER.lock();
-    let path = player
-        .current_file
-        .clone()
-        .ok_or("No file loaded")?;
+    let path = player.current_file.clone().ok_or("No file loaded")?;
 
-    // Rebuild sink with the same stream.
     let (stream, stream_handle) = ensure_output()?;
     let sink = Sink::try_new(&stream_handle).map_err(|e| format!("Sink error: {e}"))?;
 
-    let file =
-        File::open(&path).map_err(|e| format!("Cannot open file \"{path}\": {e}"))?;
+    let file = File::open(&path).map_err(|e| format!("Cannot open file \"{path}\": {e}"))?;
     let reader = BufReader::new(file);
-    let source =
-        Decoder::new(reader).map_err(|e| format!("Decode error: {e}"))?;
+    let source = Decoder::new(reader).map_err(|e| format!("Decode error: {e}"))?;
 
     sink.append(source);
 
-    // Try to seek using rodio's try_seek (available on some decoders).
     let seek_duration = std::time::Duration::from_millis(position_ms);
-    let _ = sink.try_seek(seek_duration); // best-effort
+    let _ = sink.try_seek(seek_duration);
 
     if player.paused {
         sink.pause();
+    } else {
+        sink.play();
     }
 
     player.sink = Some(sink);
     player._stream = Some(stream);
     player._stream_handle = Some(stream_handle);
-    player.play_start = if player.paused {
-        None
-    } else {
-        Some(Instant::now())
-    };
+    player.play_start = if player.paused { None } else { Some(Instant::now()) };
     player.accumulated_ms = position_ms;
 
     Ok(())
 }
 
-/// Get the current playback position in milliseconds.
 #[tauri::command]
 pub fn local_get_position() -> u64 {
     let player = PLAYER.lock();
@@ -242,7 +255,6 @@ pub fn local_get_position() -> u64 {
     }
 }
 
-/// Set playback volume (0.0 – 1.0).
 #[tauri::command]
 pub fn local_set_volume(volume: f32) -> Result<(), String> {
     let player = PLAYER.lock();
@@ -254,38 +266,61 @@ pub fn local_set_volume(volume: f32) -> Result<(), String> {
     }
 }
 
-/// Read metadata from a file without loading it into the player.
 #[tauri::command]
-pub fn local_get_metadata(path: String) -> Result<TrackMetadata, String> {
-    read_metadata(&path)
+pub fn local_get_metadata() -> Result<TrackMetadata, String> {
+    let path = {
+        let player = PLAYER.lock();
+        player.current_file.clone().unwrap_or_default()
+    };
+    if path.is_empty() {
+        return Err("No file loaded".into());
+    }
+    read_metadata(&path, &path)
 }
 
-/// Scan a folder for audio files and return metadata for each.
-/// Supported extensions: mp3, flac, ogg, wav, m4a, aac, wma.
 #[tauri::command]
-pub fn local_pick_folder(path: String) -> Result<Vec<TrackMetadata>, String> {
-    let dir = Path::new(&path);
-    if !dir.is_dir() {
-        return Err(format!("{path} is not a directory"));
+pub fn local_next() -> Result<(), String> {
+    let playlist = LOCAL_PLAYLIST.lock();
+    if playlist.is_empty() {
+        return Err("Playlist empty".into());
     }
+    let mut idx = CURRENT_INDEX.lock();
+    let next_idx = match *idx {
+        Some(i) => (i + 1) % playlist.len(),
+        None => 0,
+    };
+    *idx = Some(next_idx);
+    let track = &playlist[next_idx];
+    internal_play_file(&track.id)
+}
 
-    let exts = ["mp3", "flac", "ogg", "wav", "m4a", "aac", "wma"];
-    let mut tracks = Vec::new();
-
-    let entries = std::fs::read_dir(dir).map_err(|e| format!("Cannot read directory: {e}"))?;
-    for entry in entries.flatten() {
-        let p = entry.path();
-        if p.is_file() {
-            if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
-                if exts.contains(&ext.to_lowercase().as_str()) {
-                    if let Ok(meta) = read_metadata(&p.to_string_lossy()) {
-                        tracks.push(meta);
-                    }
-                }
-            }
-        }
+#[tauri::command]
+pub fn local_previous() -> Result<(), String> {
+    let playlist = LOCAL_PLAYLIST.lock();
+    if playlist.is_empty() {
+        return Err("Playlist empty".into());
     }
+    let mut idx = CURRENT_INDEX.lock();
+    let prev_idx = match *idx {
+        Some(i) => if i == 0 { playlist.len() - 1 } else { i - 1 },
+        None => 0,
+    };
+    *idx = Some(prev_idx);
+    let track = &playlist[prev_idx];
+    internal_play_file(&track.id)
+}
 
-    tracks.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
-    Ok(tracks)
+#[tauri::command]
+pub fn local_toggle_shuffle(state: bool) -> Result<(), String> {
+    Ok(())
+}
+
+#[tauri::command]
+pub fn local_set_repeat(state: String) -> Result<(), String> {
+    Ok(())
+}
+
+#[tauri::command]
+pub fn local_toggle_like(state: bool) -> Result<(), String> {
+    Ok(())
 }

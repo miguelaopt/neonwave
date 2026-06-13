@@ -1,25 +1,19 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import type { PlayerStore, RepeatMode, Track } from "../types";
-
-// ─── Mock Data ─────────────────────────────────────────────────────
 
 const MOCK_TRACK: Track = {
   id: "1",
-  title: "Blinding Lights",
-  artist: "The Weeknd",
-  album: "After Hours",
-  albumArtUrl: "https://i.scdn.co/image/ab67616d0000b8738863bc11d2aa12b54f5aeb36",
-  durationMs: 200_000, // 3:20
+  title: "NeonWave Player",
+  artist: "Welcome",
+  album: "Local Storage",
+  albumArtUrl: "",
+  durationMs: 0,
 };
-
-// ─── Store ─────────────────────────────────────────────────────────
 
 let pollingInterval: number | null = null;
 
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
-  // ── State ──────────────────────────────────────────────────────
   currentTrack: MOCK_TRACK,
   isPlaying: false,
   progressMs: 0,
@@ -29,16 +23,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   isLiked: false,
   visualizerEnabled: true,
   lyricsEnabled: false,
-  mode: "spotify",
-  isAuthenticated: false,
-  searchResults: [],
-
-  // ── Playback Actions ───────────────────────────────────────────
+  localTracks: [],
 
   play: async () => {
-    const { mode } = get();
     try {
-      await invoke(mode === "spotify" ? "spotify_play" : "local_play");
+      await invoke("local_play", { index: null });
       set({ isPlaying: true });
     } catch (e) {
       console.error("Play error:", e);
@@ -46,9 +35,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   pause: async () => {
-    const { mode } = get();
     try {
-      await invoke(mode === "spotify" ? "spotify_pause" : "local_pause");
+      await invoke("local_pause");
       set({ isPlaying: false });
     } catch (e) {
       console.error("Pause error:", e);
@@ -65,9 +53,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   next: async () => {
-    const { mode } = get();
     try {
-      await invoke(mode === "spotify" ? "spotify_next" : "local_next");
+      await invoke("local_next");
       set({ progressMs: 0 });
     } catch (e) {
       console.error("Next error:", e);
@@ -75,13 +62,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   previous: async () => {
-    const { mode, progressMs } = get();
+    const { progressMs } = get();
     try {
       if (progressMs > 3000) {
-        await invoke(mode === "spotify" ? "spotify_seek" : "local_seek", { positionMs: 0 });
+        await invoke("local_seek", { positionMs: 0 });
         set({ progressMs: 0 });
       } else {
-        await invoke(mode === "spotify" ? "spotify_previous" : "local_previous");
+        await invoke("local_previous");
         set({ progressMs: 0 });
       }
     } catch (e) {
@@ -90,34 +77,28 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   seek: async (positionMs: number) => {
-    const { mode } = get();
     try {
-      await invoke(mode === "spotify" ? "spotify_seek" : "local_seek", { positionMs });
+      await invoke("local_seek", { positionMs });
       set({ progressMs: positionMs });
     } catch (e) {
       console.error("Seek error:", e);
     }
   },
 
-  // ── Volume ─────────────────────────────────────────────────────
-
   setVolume: async (volume: number) => {
-    const { mode } = get();
     const clampedVolume = Math.max(0, Math.min(100, volume));
     try {
-      await invoke(mode === "spotify" ? "spotify_set_volume" : "local_set_volume", { volume: clampedVolume });
+      await invoke("local_set_volume", { volume: clampedVolume });
       set({ volume: clampedVolume });
     } catch (e) {
       console.error("Set volume error:", e);
     }
   },
 
-  // ── Mode Toggles ──────────────────────────────────────────────
-
   toggleShuffle: async () => {
-    const { mode, shuffle } = get();
+    const { shuffle } = get();
     try {
-      await invoke(mode === "spotify" ? "spotify_toggle_shuffle" : "local_toggle_shuffle", { state: !shuffle });
+      // NOTE: If shuffle is not supported natively in backend, just update UI
       set({ shuffle: !shuffle });
     } catch (e) {
       console.error("Toggle shuffle error:", e);
@@ -125,13 +106,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   cycleRepeat: async () => {
-    const { mode, repeat } = get();
+    const { repeat } = get();
     const modes: RepeatMode[] = ["off", "all", "one"];
     const currentIndex = modes.indexOf(repeat);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    const nextRepeat = modes[nextIndex];
+    const nextRepeat = modes[(currentIndex + 1) % modes.length];
     try {
-      await invoke(mode === "spotify" ? "spotify_set_repeat" : "local_set_repeat", { state: nextRepeat });
+      // NOTE: update UI
       set({ repeat: nextRepeat });
     } catch (e) {
       console.error("Cycle repeat error:", e);
@@ -139,9 +119,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   toggleLike: async () => {
-    const { mode, isLiked } = get();
+    const { isLiked } = get();
     try {
-      await invoke(mode === "spotify" ? "spotify_toggle_like" : "local_toggle_like", { state: !isLiked });
       set({ isLiked: !isLiked });
     } catch (e) {
       console.error("Toggle like error:", e);
@@ -156,12 +135,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     set((state) => ({ lyricsEnabled: !state.lyricsEnabled }));
   },
 
-  setMode: (newMode: "spotify" | "local") => {
-    set({ mode: newMode });
-  },
-
-  // ── Internal ──────────────────────────────────────────────────
-
   setProgress: (ms: number) => {
     set({ progressMs: ms });
   },
@@ -170,108 +143,48 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     set({ currentTrack: track, progressMs: 0, isPlaying: false });
   },
 
+  scanDirectory: async (path: string) => {
+    try {
+      const tracks = await invoke<Track[]>("scan_directory", { path });
+      set({ localTracks: tracks });
+    } catch (e) {
+      console.error("Scan directory error:", e);
+    }
+  },
+
+  playLocalTrack: async (index: number) => {
+    try {
+      await invoke("local_play", { index });
+      const track = get().localTracks[index];
+      if (track) {
+        set({ currentTrack: track, isPlaying: true, progressMs: 0 });
+      }
+    } catch (e) {
+      console.error("Play local track error:", e);
+    }
+  },
+
   startPolling: () => {
     if (pollingInterval) return;
     pollingInterval = window.setInterval(async () => {
-      const { mode } = get();
       try {
-        if (mode === "spotify") {
-          const state: any = await invoke("spotify_get_playback");
-          if (state && state.item) {
+        const position: number = await invoke("local_get_position");
+        set({ progressMs: position });
+
+        // Update track metadata if it changed in backend
+        const metadata: any = await invoke("local_get_metadata");
+        if (metadata && metadata.id) {
+          const { currentTrack } = get();
+          if (currentTrack.id !== metadata.id) {
             set({
-              isPlaying: state.is_playing,
-              progressMs: state.progress_ms,
-              currentTrack: {
-                id: state.item.id,
-                title: state.item.name,
-                artist: state.item.artists?.[0]?.name || "Unknown Artist",
-                album: state.item.album?.name || "Unknown Album",
-                albumArtUrl: state.item.album?.images?.[0]?.url || "",
-                durationMs: state.item.duration_ms,
-              },
+               currentTrack: metadata,
+               isPlaying: true
             });
           }
-        } else {
-          const position: number = await invoke("local_get_position");
-          set({ progressMs: position });
         }
       } catch (e) {
-        // Suppress polling errors to avoid console spam when not connected
+        // Suppress
       }
     }, 1000);
-  },
-
-  // ── Spotify Auth ─────────────────────────────────────────────
-
-  checkSpotifyAuth: async () => {
-    try {
-      const isAuth: boolean = await invoke("spotify_is_authenticated");
-      set({ isAuthenticated: isAuth });
-      if (isAuth) {
-        get().startPolling();
-      }
-    } catch (e) {
-      console.error("Check auth error:", e);
-      set({ isAuthenticated: false });
-    }
-  },
-
-  loginSpotify: async () => {
-    try {
-      const url: string = await invoke("spotify_auth_url");
-      await openUrl(url);
-    } catch (e) {
-      console.error("Login URL error:", e);
-    }
-  },
-
-  submitSpotifyCode: async (urlOrCode: string) => {
-    try {
-      let code = urlOrCode.trim();
-      if (code.includes("code=")) {
-        try {
-          const urlStr = code.startsWith("http") ? code : `http://localhost${code.startsWith("/") ? "" : "/"}${code}`;
-          const url = new URL(urlStr);
-          code = url.searchParams.get("code") || code;
-        } catch (err) {
-          // Fallback if URL parsing fails
-          const match = code.match(/code=([^&]+)/);
-          if (match) code = match[1];
-        }
-      }
-      await invoke("spotify_callback", { code });
-      set({ isAuthenticated: true });
-      get().startPolling();
-    } catch (e) {
-      console.error("Callback error:", e);
-      throw e;
-    }
-  },
-
-  search: async (query: string) => {
-    try {
-      const results: any[] = await invoke("spotify_search", { query });
-      set({
-        searchResults: results.map((r) => ({
-          id: r.id,
-          title: r.title,
-          artist: r.artist,
-          album: "", // Will be empty from backend currently
-          albumArtUrl: r.albumArtUrl || "",
-          durationMs: 0, // Ignored
-        })),
-      });
-    } catch (e) {
-      console.error("Search error:", e);
-    }
-  },
-
-  playTrack: async (uri: string) => {
-    try {
-      await invoke("spotify_play_track", { uri });
-      set({ isPlaying: true });
-    } catch (e) {
-      console.error("Play track error:", e);
-    }
   },
 }));

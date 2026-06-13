@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+﻿import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import TitleBar from "./components/TitleBar";
 import AuraDisc from "./components/AuraDisc";
@@ -6,9 +6,7 @@ import TrackInfo from "./components/TrackInfo";
 import PlayerControls from "./components/PlayerControls";
 import ProgressBar from "./components/ProgressBar";
 import Visualizer from "./components/Visualizer";
-import ModeToggle from "./components/ModeToggle";
 import LyricsOverlay from "./components/LyricsOverlay";
-import SpotifyLogin from "./components/SpotifyLogin";
 import LeftSidebar from "./components/LeftSidebar";
 import { usePlayerStore } from "./stores/playerStore";
 import { Music } from "lucide-react";
@@ -17,18 +15,11 @@ export default function App() {
   const visualizerEnabled = usePlayerStore((s) => s.visualizerEnabled);
   const lyricsEnabled = usePlayerStore((s) => s.lyricsEnabled);
   const startPolling = usePlayerStore((s) => s.startPolling);
-  const checkSpotifyAuth = usePlayerStore((s) => s.checkSpotifyAuth);
-  const mode = usePlayerStore((s) => s.mode);
-  const isAuthenticated = usePlayerStore((s) => s.isAuthenticated);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
 
   useEffect(() => {
-    if (mode === "spotify") {
-      checkSpotifyAuth();
-    } else {
-      startPolling();
-    }
-  }, [mode, checkSpotifyAuth, startPolling]);
+    startPolling();
+  }, [startPolling]);
 
   return (
     <div className="w-full h-full bg-neonwave-radial text-text-primary font-sans relative overflow-hidden">
@@ -57,7 +48,7 @@ export default function App() {
           {/* Center Column: AuraDisc & TrackInfo */}
           <div className="flex-1 flex flex-col items-center justify-center gap-8 z-10 relative">
             <div className="relative">
-              {mode === "local" && currentTrack?.id === "1" ? (
+              {currentTrack?.id === "1" ? (
                 <div className="w-80 h-80 rounded-full bg-white/5 border border-white/10 flex flex-col items-center justify-center text-text-secondary gap-4 shadow-lg backdrop-blur-sm">
                   <Music size={48} className="opacity-50" />
                   <p className="text-sm font-medium tracking-wide">No track loaded</p>
@@ -70,10 +61,6 @@ export default function App() {
             <div className="flex items-center gap-2 w-full max-w-sm justify-center">
               <TrackInfo />
             </div>
-
-            <AnimatePresence>
-              {mode === "spotify" && !isAuthenticated && <SpotifyLogin />}
-            </AnimatePresence>
           </div>
 
           {/* Right Column: Lyrics (If enabled) */}
@@ -117,11 +104,6 @@ export default function App() {
               </motion.div>
             )}
           </AnimatePresence>
-
-          {/* Mode toggle row */}
-          <div className="flex justify-center mt-2 mb-1">
-            <ModeToggle />
-          </div>
         </div>
       </motion.main>
     </div>

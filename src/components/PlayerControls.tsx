@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+﻿import { motion } from "framer-motion";
 import {
   Play,
   Pause,
@@ -27,7 +27,6 @@ export default function PlayerControls() {
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
   const cycleRepeat = usePlayerStore((s) => s.cycleRepeat);
   const setVolume = usePlayerStore((s) => s.setVolume);
-  const mode = usePlayerStore((s) => s.mode);
 
   const handleOpenFile = async () => {
     try {
@@ -41,7 +40,7 @@ export default function PlayerControls() {
       
       if (selectedPath && typeof selectedPath === "string") {
         await invoke("local_open_file", { path: selectedPath });
-        await invoke("local_play");
+        await invoke("local_play", { index: null });
         usePlayerStore.setState({ isPlaying: true, progressMs: 0 });
       }
     } catch (e) {
@@ -56,11 +55,9 @@ export default function PlayerControls() {
     <div className="flex items-center justify-between w-full gap-3">
       {/* Left: Open File + Shuffle */}
       <div className="flex items-center gap-1 flex-1 justify-start">
-        {mode === "local" && (
-          <ControlButton onClick={handleOpenFile} label="Open File">
-            <FolderOpen size={16} strokeWidth={2} />
-          </ControlButton>
-        )}
+        <ControlButton onClick={handleOpenFile} label="Open File">
+          <FolderOpen size={16} strokeWidth={2} />
+        </ControlButton>
         <ControlButton
           onClick={toggleShuffle}
           active={shuffle}
@@ -125,7 +122,7 @@ export default function PlayerControls() {
             <div className="absolute w-full h-1 rounded-full bg-white/10" />
             <div
               className="absolute h-1 rounded-full bg-gradient-to-r from-neon-purple to-neon-pink"
-              style={{ width: `${volume}%` }}
+              style={{ width: \\%\ }}
             />
             <input
               type="range"
@@ -141,7 +138,7 @@ export default function PlayerControls() {
               className="absolute w-3 h-3 rounded-full bg-white shadow-[0_0_8px_rgba(176,38,255,0.6)]
                          pointer-events-none transition-all duration-150
                          opacity-0 group-hover:opacity-100"
-              style={{ left: `calc(${volume}% - 6px)` }}
+              style={{ left: \calc(\% - 6px)\ }}
             />
           </div>
         </div>
@@ -168,13 +165,9 @@ function ControlButton({
       whileHover={{ scale: 1.15 }}
       whileTap={{ scale: 0.9 }}
       onClick={onClick}
-      className={`w-9 h-9 flex items-center justify-center rounded-xl
+      className={\w-9 h-9 flex items-center justify-center rounded-xl
                   transition-all duration-300
-                  ${
-                    active
-                      ? "text-neon-purple drop-shadow-[0_0_8px_rgba(176,38,255,0.5)]"
-                      : "text-text-secondary hover:text-text-primary"
-                  }`}
+                  \\}
       aria-label={label}
     >
       {children}
